@@ -12,7 +12,9 @@ import SwiftData
 struct KaloriTakipApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            WeightEntry.self,
+            FoodEntry.self,
+            ActivityEntry.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,8 +27,8 @@ struct KaloriTakipApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView() // ContentView'i burada çağırıyoruz
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(sharedModelContainer) // Veritabanını uygulamaya burada bağlıyoruz
     }
 }
