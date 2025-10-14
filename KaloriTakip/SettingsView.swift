@@ -19,15 +19,20 @@ struct SettingsView: View {
     @AppStorage("userGender") private var userGender: String = "Erkek"
     @AppStorage("userActivityMultiplier") private var userActivityMultiplier: Double = 1.375
 
+    // --- EKSİK OLAN HESAPLAMALAR BURADA TAMAMLANDI ---
     private var bmiResult: (value: Double, category: BMICategory, recommendation: String)? {
         guard let bmiValue = BMICalculator.calculateBMI(weightInKg: userWeight, heightInCm: userHeight) else { return nil }
-        let category = BMICalculator.getCategory(from: bmiValue); let recommendation = BMICalculator.getRecommendation(for: category)
+        let category = BMICalculator.getCategory(from: bmiValue)
+        let recommendation = BMICalculator.getRecommendation(for: category)
         return (bmiValue, category, recommendation)
     }
     
     private var basalMetabolismRate: Int? {
-        if userGender == "Erkek" { return Int((10*userWeight)+(6.25*Double(userHeight))-(5*Double(userAge))+5) }
-        else { return Int((10*userWeight)+(6.25*Double(userHeight))-(5*Double(userAge))-161) }
+        if userGender == "Erkek" {
+            return Int((10 * userWeight) + (6.25 * Double(userHeight)) - (5 * Double(userAge)) + 5)
+        } else {
+            return Int((10 * userWeight) + (6.25 * Double(userHeight)) - (5 * Double(userAge)) - 161)
+        }
     }
 
     let genders = ["Erkek", "Kadın"]
@@ -35,7 +40,12 @@ struct SettingsView: View {
 
     var body: some View {
         ZStack {
-            Color.appBackground.ignoresSafeArea()
+            Color.appBackground
+                .ignoresSafeArea()
+                .onTapGesture {
+                    hideKeyboard()
+                }
+            
             NavigationStack {
                 Form {
                     Section(header: Text("Vücut Kitle İndeksin (VKİ)")) {
@@ -63,7 +73,7 @@ struct SettingsView: View {
                     }
                     Section {
                         Button { showingInfoSheet = true } label: { Label("Kalori ve Kilo Kontrolü Hakkında Bilgi", systemImage: "info.circle") }
-                        .buttonStyle(.plain) 
+                            .buttonStyle(.plain)
                     }
                     Section(header: Text("Hesaplamalar Hakkında")) {
                          Text("Yakılan kalori, popüler Mifflin-St Jeor formülü kullanılarak tahmin edilmektedir. Bu bir tıbbi tavsiye değildir.").font(.caption).foregroundColor(.gray)
@@ -71,17 +81,22 @@ struct SettingsView: View {
                 }
                 .scrollContentBackground(.hidden).navigationTitle("Ayarlar")
                 .onAppear { weightString = String(userWeight) }.onChange(of: isWeightFieldFocused) { if !isWeightFieldFocused { saveWeightChanges() } }
-                .onTapGesture { hideKeyboard() }
                 .sheet(isPresented: $showingInfoSheet) { InfoView() }
             }
         }
     }
     
+    // --- EKSİK OLAN FONKSİYONLAR BURADA TAMAMLANDI ---
     private func getCategoryColor(_ category: BMICategory) -> Color {
-        switch category { case .zayif: .blue; case .normal: .green; case .fazlaKilo: .orange; case .obez: .red; default: .gray }
+        switch category {
+        case .zayif: return .blue
+        case .normal: return .green
+        case .fazlaKilo: return .orange
+        case .obez: return .red
+        default: return .gray
+        }
     }
     
-    // ----- HATA BURADAYDI VE DÜZELTİLDİ -----
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
