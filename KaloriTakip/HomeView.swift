@@ -11,9 +11,12 @@ import SwiftData
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var showingHistorySheet = false
-    @Query private var foodEntries: [FoodEntry]
-    @Query private var activityEntries: [ActivityEntry]
     
+    // Sorguları, init() metodu içinde oluşturarak predicate hatalarını gideriyoruz.
+    @Query private var foodEntries: [FoodEntry]
+    @Query private var todayActivities: [ActivityEntry]
+    
+    // Genel geçer varsayılan değerler
     @AppStorage("userAge") private var userAge: Int = 25
     @AppStorage("userHeight") private var userHeight: Int = 170
     @AppStorage("userWeight") private var userWeight: Double = 70.0
@@ -24,22 +27,30 @@ struct HomeView: View {
     @State private var showingAddActivitySheet = false
     
     init() {
-        let today = Calendar.current.startOfDay(for: .now); let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
-        _foodEntries = Query(filter: #Predicate<FoodEntry> { $0.date >= today && $0.date < tomorrow }, sort: \.date, order: .reverse)
-        _activityEntries = Query(filter: #Predicate<ActivityEntry> { $0.date >= today && $0.date < tomorrow }, sort: \.date, order: .reverse)
+        let today = Calendar.current.startOfDay(for: .now)
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
+        
+        _foodEntries = Query(filter: #Predicate<FoodEntry> {
+            $0.date >= today && $0.date < tomorrow
+        }, sort: \.date, order: .reverse)
+        
+        _todayActivities = Query(filter: #Predicate<ActivityEntry> {
+            $0.date >= today && $0.date < tomorrow
+        }, sort: \.date, order: .reverse)
     }
     
+    // Hesaplamalar
     private var totalCaloriesToday: Int { foodEntries.reduce(0) { $0 + $1.calories } }
-    private var totalBurnedFromActivities: Int { activityEntries.reduce(0) { $0 + $1.caloriesBurned } }
+    private var totalBurnedFromActivities: Int { todayActivities.reduce(0) { $0 + $1.caloriesBurned } }
     private var basalMetabolismRate: Double {
-        if userGender == "Erkek" { return (10*userWeight)+(6.25*Double(userHeight))-(5*Double(userAge))+5 } else { return (10*userWeight)+(6.25*Double(userHeight))-(5*Double(userAge))-161 }
+        if userGender == "Erkek" { return (10*userWeight)+(6.25*Double(userHeight))-(5*Double(userAge))+5 }
+        else { return (10*userWeight)+(6.25*Double(userHeight))-(5*Double(userAge))-161 }
     }
     private var totalDailyEnergyExpenditure: Int { Int(basalMetabolismRate * userActivityMultiplier) + totalBurnedFromActivities }
     private var calorieBalance: Int { totalCaloriesToday - totalDailyEnergyExpenditure }
     
     var body: some View {
         ZStack {
-            // ----- HATA BURADAYDI VE DÜZELTİLDİ -----
             Color.appBackground.ignoresSafeArea()
             NavigationStack {
                 List {
@@ -55,18 +66,25 @@ struct HomeView: View {
                         .padding().background(Color(uiColor: .systemBackground)).cornerRadius(12).shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5).padding(.vertical, 5)
                     }
                     .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                    
                     Section(header: Text("Bugün Yediğin Yemekler").font(.headline)) {
                         if foodEntries.isEmpty { Text("Henüz yemek eklemedin.").foregroundColor(.gray) }
                         else { ForEach(foodEntries) { entry in HStack { Text(entry.name); Spacer(); Text("\(entry.calories) kcal").foregroundColor(.gray) } }.onDelete(perform: deleteFood) }
                     }
+                    
                     Section(header: Text("Bugün Yaptığın Aktiviteler").font(.headline)) {
-                        if activityEntries.isEmpty { Text("Henüz aktivite eklemedin.").foregroundColor(.gray) }
-                        else { ForEach(activityEntries) { entry in HStack { Text(entry.name); Spacer(); Text("\(entry.caloriesBurned) kcal yaktın").foregroundColor(.green) } }.onDelete(perform: deleteActivity) }
+                        if todayActivities.isEmpty { Text("Henüz aktivite eklemedin.").foregroundColor(.gray) }
+                        else { ForEach(todayActivities) { entry in HStack { Text(entry.name); Spacer(); Text("\(entry.caloriesBurned) kcal yaktın").foregroundColor(.green) } }.onDelete(perform: deleteActivity) }
                     }
                 }
                 .scrollContentBackground(.hidden).navigationTitle("Anasayfa")
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) { Button { showingHistorySheet = true } label: { Image(systemName: "calendar").font(.title3) } }
+                    ToolbarItem(placement: .topBarLeading) {
+                        HStack {
+                            Button { showingHistorySheet = true } label: { Image(systemName: "calendar").font(.title3) }
+                            Button { syncWithHealthKit() } label: { Image(systemName: "arrow.triangle.2.circlepath").font(.title3) }
+                        }
+                    }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Menu {
                             Button(action: { showingAddFoodSheet = true }) { Label("Yemek Ekle", systemImage: "fork.knife.circle") }
@@ -81,8 +99,42 @@ struct HomeView: View {
         }
     }
     
-    private func deleteFood(at offsets: IndexSet) { for index in offsets { modelContext.delete(foodEntries[index]) } }
-    private func deleteActivity(at offsets: IndexSet) { for index in offsets { modelContext.delete(activityEntries[index]) } }
+    private func syncWithHealthKit() {
+        HealthKitManager.shared.requestAuthorization { success in
+            guard success else {
+                print("Kullanıcı HealthKit izni vermedi.")
+                return
+            }
+            
+            HealthKitManager.shared.fetchTodaysActiveEnergy { totalCalories in
+                DispatchQueue.main.async {
+                    guard let calories = totalCalories, calories > 0 else {
+                        print("Bugün için aktif kalori verisi bulunamadı veya sıfır.")
+                        return
+                    }
+                    
+                    let healthActivityName = "Hareket (Sağlık)"
+                    
+                    if let existingActivity = todayActivities.first(where: { $0.name == healthActivityName }) {
+                        existingActivity.caloriesBurned = Int(calories)
+                        print("HealthKit verisi güncellendi: \(Int(calories)) kcal")
+                    } else {
+                        let newActivity = ActivityEntry(name: healthActivityName, caloriesBurned: Int(calories), date: .now)
+                        modelContext.insert(newActivity)
+                        print("HealthKit verisi eklendi: \(Int(calories)) kcal")
+                    }
+                }
+            }
+        }
+    }
+    
+    private func deleteFood(at offsets: IndexSet) {
+        for index in offsets { modelContext.delete(foodEntries[index]) }
+    }
+    
+    private func deleteActivity(at offsets: IndexSet) {
+        for index in offsets { modelContext.delete(todayActivities[index]) }
+    }
 }
 
 struct StatView: View {

@@ -33,14 +33,18 @@ final class FoodEntry {
     }
 }
 
-// YENİ: Her bir aktivite girdisini tutacak model
 @Model
 final class ActivityEntry {
+    // YENİ: HealthKit'ten gelen verinin kimliğini saklamak için.
+    // Bu, verinin tekrar eklenmesini önleyecek.
+    var healthKitUUID: UUID?
+    
     var name: String
     var caloriesBurned: Int
     var date: Date
     
-    init(name: String, caloriesBurned: Int, date: Date) {
+    init(healthKitUUID: UUID? = nil, name: String, caloriesBurned: Int, date: Date) {
+        self.healthKitUUID = healthKitUUID
         self.name = name
         self.caloriesBurned = caloriesBurned
         self.date = date
